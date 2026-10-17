@@ -67,7 +67,7 @@ def merge_blocks(dst, src_blocks):
                 lines.append(line)
         if not lines:
             continue
-        if label and label in by_label:
+        if label in by_label:
             existing = by_label[label]["lines"]
             if existing and re.search(r"[А-Яа-яЁёІіЇїЄєҐґ]-$", existing[-1]):
                 existing[-1] = existing[-1][:-1] + lines.pop(0)
