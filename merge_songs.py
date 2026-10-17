@@ -138,9 +138,11 @@ def audit(songs, expected_count=None):
         "unexpected": sorted(num for num in nums if num < 1 or num > last),
         "incomplete": [song["num"] for song in songs if not song["complete"]],
         "empty": [song["num"] for song in songs if not song["title"] or not song["blocks"]],
+        # An unlabeled block is allowed only as the whole text of a song (choral pieces).
         "invalid_labels": [song["num"] for song in songs
                            if any(not re.fullmatch(r"(?:[1-9]\d* КУПЛЕТ|ПРИПЕВ(?: [1-9]\d*)?)",
-                                  block["label"]) for block in song["blocks"])],
+                                  block["label"]) and (block["label"] or len(song["blocks"]) > 1)
+                                  for block in song["blocks"])],
         "uncertain": [song["num"] for song in songs
                       if "[?]" in song["title"] or any("[?]" in line
                       for block in song["blocks"] for line in block["lines"])],
