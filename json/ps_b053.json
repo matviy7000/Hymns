@@ -365,7 +365,7 @@
    "src": "p0296.png",
    "num": "308",
    "title": "Вернись, вернись!",
-   "complete": true,
+   "complete": false,
    "blocks": [
     {
      "label": "1 КУПЛЕТ",
