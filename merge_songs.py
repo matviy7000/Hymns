@@ -125,7 +125,19 @@ def merge(items):
         by_num[num] = song
     for song in songs:
         song["sources"] = sorted(set(song["sources"]), key=page_key)
+        chorus_after_first(song["blocks"])
     return sorted(songs, key=lambda song: int(song["num"]))
+
+
+def chorus_after_first(blocks):
+    """Sample layout: 1 КУПЛЕТ, ПРИПЕВ, 2 КУПЛЕТ ...
+
+    A chorus printed (or read from the next page) after the last verse is
+    moved up; songs with several different choruses keep the book order."""
+    labels = [block["label"] for block in blocks]
+    if (labels.count("ПРИПЕВ") == 1 and len(labels) > 2 and labels[0] == "1 КУПЛЕТ"
+            and not any(label.startswith("ПРИПЕВ ") for label in labels)):
+        blocks.insert(1, blocks.pop(labels.index("ПРИПЕВ")))
 
 
 def audit(songs, expected_count=None):
