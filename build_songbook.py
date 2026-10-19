@@ -12,15 +12,42 @@ from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 
 MM = 72.0 / 25.4
-FONTS = r"C:\Windows\Fonts"
+# Arial у Windows; Liberation Sans має ті самі метрики й кирилицю (Linux).
+FONT_SETS = [
+    (r"C:\Windows\Fonts", ("arial.ttf", "arialbd.ttf", "arialbi.ttf", "ariali.ttf")),
+    ("/usr/share/fonts/truetype/liberation",
+     ("LiberationSans-Regular.ttf", "LiberationSans-Bold.ttf",
+      "LiberationSans-BoldItalic.ttf", "LiberationSans-Italic.ttf")),
+]
 
 
 def reg():
-    """Зареєструвати кириличні шрифти Windows."""
-    pairs = [("S", "arial.ttf"), ("SB", "arialbd.ttf"),
-             ("SBI", "arialbi.ttf"), ("SI", "ariali.ttf")]
-    for name, fn in pairs:
-        pdfmetrics.registerFont(TTFont(name, os.path.join(FONTS, fn)))
+    """Зареєструвати кириличні шрифти (Arial або сумісний Liberation Sans)."""
+    for folder, files in FONT_SETS:
+        paths = [os.path.join(folder, fn) for fn in files]
+        if all(os.path.isfile(path) for path in paths):
+            for name, path in zip(("S", "SB", "SBI", "SI"), paths):
+                pdfmetrics.registerFont(TTFont(name, path))
+            return
+    raise FileNotFoundError("Не знайдено шрифтів Arial / Liberation Sans")
+
+
+def paginate(ops, height):
+    """Розбити надто довгу пісню на кілька сторінок (крайній випадок)."""
+    pages, cur, used = [], [], 0
+    for op in ops:
+        if cur and used + op[4] > height and op[3] is not None:
+            # Позначка куплету не повинна лишатися внизу без рядків.
+            carry = [cur.pop()] if cur[-1][0] == "SB" else []
+            pages.append(cur)
+            cur, used = carry, sum(o[4] for o in carry)
+        if op[3] is None and not cur:
+            continue
+        cur.append(op)
+        used += op[4]
+    if cur:
+        pages.append(cur)
+    return pages
 
 
 def wrap(text, font, size, width):
@@ -63,7 +90,7 @@ def build(songs, out_path, book_title):
             raise ValueError(f"Empty song: {num}")
         head = f"{num}.   {s['title']}"
         fitted = False
-        # Measure before drawing: a long song must not create a second page.
+        # Measure before drawing: shrink the font until the song fits one page.
         for quarter in range(15):
             size = 11.5 - quarter * 0.25
             scale = size / 11.5
@@ -86,25 +113,30 @@ def build(songs, out_path, book_title):
                                    for line in wrap(raw, "S", size, avail - 2 * MM))
                     ops.append((None, 0, 0, None, gap))
                 if sum(op[4] for op in ops) <= H - T - B:
-                    layouts.append(ops)
+                    layouts.append((num, s["title"], [ops]))
                     fitted = True
                     break
             if fitted:
                 break
         if not fitted:
-            raise ValueError(f"Song {num} cannot fit one A4 page at a readable font size")
+            # Навіть 8 pt не вміщається: продовжити пісню на наступній сторінці.
+            layouts.append((num, s["title"], paginate(ops, H - T - B)))
+            print(f"увага: пісня {num} займає більше однієї сторінки")
     if not layouts:
         raise ValueError("No songs to print")
     c = canvas.Canvas(out_path, pagesize=A4, pageCompression=1)
     c.setTitle(book_title)
-    for ops in layouts:
-        y = H - T
-        for font, size, indent, text, step in ops:
-            if text is not None:
-                c.setFont(font, size)
-                c.drawString(L + indent, y, text)
-            y -= step
-        c.showPage()
+    for num, title, pages in layouts:
+        c.bookmarkPage(f"s{num}")
+        c.addOutlineEntry(f"{num}. {title}", f"s{num}", level=0)
+        for ops in pages:
+            y = H - T
+            for font, size, indent, text, step in ops:
+                if text is not None:
+                    c.setFont(font, size)
+                    c.drawString(L + indent, y, text)
+                y -= step
+            c.showPage()
     c.save()
     return out_path
 

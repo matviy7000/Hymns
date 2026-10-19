@@ -67,7 +67,7 @@ def merge_blocks(dst, src_blocks):
                 lines.append(line)
         if not lines:
             continue
-        if label and label in by_label:
+        if label in by_label:
             existing = by_label[label]["lines"]
             if existing and re.search(r"[А-Яа-яЁёІіЇїЄєҐґ]-$", existing[-1]):
                 existing[-1] = existing[-1][:-1] + lines.pop(0)
@@ -125,7 +125,19 @@ def merge(items):
         by_num[num] = song
     for song in songs:
         song["sources"] = sorted(set(song["sources"]), key=page_key)
+        chorus_after_first(song["blocks"])
     return sorted(songs, key=lambda song: int(song["num"]))
+
+
+def chorus_after_first(blocks):
+    """Sample layout: 1 КУПЛЕТ, ПРИПЕВ, 2 КУПЛЕТ ...
+
+    A chorus printed (or read from the next page) after the last verse is
+    moved up; songs with several different choruses keep the book order."""
+    labels = [block["label"] for block in blocks]
+    if (labels.count("ПРИПЕВ") == 1 and len(labels) > 2 and labels[0] == "1 КУПЛЕТ"
+            and not any(label.startswith("ПРИПЕВ ") for label in labels)):
+        blocks.insert(1, blocks.pop(labels.index("ПРИПЕВ")))
 
 
 def audit(songs, expected_count=None):
@@ -138,9 +150,11 @@ def audit(songs, expected_count=None):
         "unexpected": sorted(num for num in nums if num < 1 or num > last),
         "incomplete": [song["num"] for song in songs if not song["complete"]],
         "empty": [song["num"] for song in songs if not song["title"] or not song["blocks"]],
+        # An unlabeled block is allowed only as the whole text of a song (choral pieces).
         "invalid_labels": [song["num"] for song in songs
                            if any(not re.fullmatch(r"(?:[1-9]\d* КУПЛЕТ|ПРИПЕВ(?: [1-9]\d*)?)",
-                                  block["label"]) for block in song["blocks"])],
+                                  block["label"]) and (block["label"] or len(song["blocks"]) > 1)
+                                  for block in song["blocks"])],
         "uncertain": [song["num"] for song in songs
                       if "[?]" in song["title"] or any("[?]" in line
                       for block in song["blocks"] for line in block["lines"])],
